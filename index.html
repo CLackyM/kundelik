@@ -9,36 +9,76 @@
   <body>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
 		<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+		<script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/primevue/umd/primevue.min.js"></script>
     <script src="https://unpkg.com/@primevue/themes/umd/aura.min.js"></script>
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/primeicons/7.0.0/primeicons.min.css" integrity="sha512-AmPkAwXBnEkMWvc+V9PvjVgFmJWB3HKMSgBJolV4LMXwAwoFTAlk5WY1yiz504VynFGQLwiLVp/JqlcWxAEmJw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 
     <div id="app">
-			<p-inputtext type="text" v-model="login" ></p-inputtext>
-			<p-inputtext type="text" v-model="pass" ></p-inputtext>
-			<p-button label="Submit" @click="getTokens()"></p-button>
-      Users:
-			<div v-for="(user, index) in users" :key="'users-'+index">
-				{{user.login}}
-			</div>
+			<p-button @click="addUserDialog = true" icon="pi pi-plus" rounded></p-button>
+			<hr>
+			<p-tabs value="0" scrollable>
+				<tablist>
+						<p-tab v-for="(user, index) in users" :key="'users-'+index" :value="index" @click="selectUser(index)">
+								{{ user.login }}
+						</p-tab>
+				</tablist>
+			</p-tabs>
+			<template v-if="user">
+				<img :src="user.avatarUrl" class="w-24"/>
+				{{user.firstName}}
+				<br>
+				{{user.lastName}}
+				<br>
+				{{user.school.name}}
+				<br>
+				{{user.group.name}}
+			</template>
+			<template v-if="selectedUser">
+				{{selectedUser}}
+			</template>
+			<p-dialog v-model:visible="addUserDialog" modal header="Добавить ученика" :style="{ width: '25rem' }">
+				<div class="flex items-center gap-4 mb-4">
+						<label for="id" class="font-semibold w-24">id</label>
+						<p-inputtext v-model="cId" id="id" class="flex-auto" autocomplete="on" />
+				</div>
+				<div class="flex items-center gap-4 mb-4">
+					<label for="secret" class="font-semibold w-24">secret</label>
+					<p-inputtext v-model="cSecret" id="secret" class="flex-auto" autocomplete="on" />
+				</div>
+				<div class="flex items-center gap-4 mb-8">
+						<label for="login" class="font-semibold w-24">Логин</label>
+						<p-inputtext v-model="login" id="login" class="flex-auto" autocomplete="on" />
+				</div>
+				<div class="flex items-center gap-4 mb-8">
+					<label for="password" class="font-semibold w-24">Пароль</label>
+					<p-password v-model="pass" id="password" toggle-mask :feedback="false" class="flex-auto"/>
+				</div>
+				<div class="flex justify-end gap-2">
+						<p-button label="Добавить" @click="getTokens()"></p-button>
+						<p-button type="button" label="Отмена" @click="addUserDialog = false"></p-button>
+				</div>
+		</p-dialog>
     </div>
 
     <script>
-      const { createApp, ref, onMounted } = Vue;
+      const { createApp, ref, onMounted, watch } = Vue;
 
       const app = createApp({
         setup() {
           const date = ref();
-					const user = ref({
-						login: '',
-						access: '',
-						refresh: ''
-					})
+					const selectedUser = ref({});
+					const user = ref();
+					const cId = ref();
+					const cSecret = ref();
 					const login = ref();
 					const pass = ref();
 					const users = ref([]);
 					const pending = ref({
-						login: false
+						login: false,
+						userInfo: false
 					});
+					const addUserDialog = ref(false);
 					const instance = axios.create({
 						baseURL: 'https://api.kundelik.kz/',
 						timeout: 1000,
@@ -48,8 +88,10 @@
 						localStorage.setItem('users', JSON.stringify(users.value));
 					}
 					const getTokens = async (callback)=> {
+						pending.value.login = true
 						try {
-							const data = await instance.post('mobile/v7/authorizations/bycredentials', {"password":pass.value,"scope":"commoninfo,friendsandrelatives,educationalinfo","clientId":"387D44E3-E0C9-4265-A9E4-A4CAAAD5111C","clientSecret":"8A7D709C-FDBB-4047-B0EA-8947AFE89D67","username":login.value})
+							instance.defaults.headers.common['Access-Token'] = '';
+							const data = await instance.post('mobile/v7/authorizations/bycredentials', {"password":pass.value,"scope":"commoninfo,friendsandrelatives,educationalinfo","clientId":cId.value,"clientSecret":cSecret.value,"username":login.value})
 
 							pending.value.login = false
 							//this.config = data.data
@@ -78,20 +120,50 @@
 						console.log('users',users.value)
 						
 					}
-					const selectUser = ()=> {
+					const selectUser = (index)=> {
+						console.log('selectUser', users.value[index])
 						
+						selectedUser.value = users.value[index]
+						instance.defaults.headers.common['Access-Token'] = selectedUser.value.access;
+						console.log(instance)
+					}
+					const getUserInfo = async ()=> {
+						pending.value.userInfo = true
+						try {
+							const data = await instance.get(`/mobile/v7/users/${selectedUser.value.id}/context`)
+
+							pending.value.userInfo = false
+							//this.config = data.data
+							console.log('data', data.data.contextPersons[0])
+							user.value = data.data.contextPersons[0]
+							callback && callback();
+							
+						} catch (error) {
+							if (error.response) {
+								pending.value.userInfo = false
+								console.log(error.response.data.description);
+							}
+						}
 					}
 					onMounted(()=>{
 						getUsers()
 					})
-					
+					watch(() => selectedUser, () => {
+						getUserInfo();
+					}, { deep: true })
           return {
             date,
+						cId,
+						cSecret,
 						login,
 						pass,
 						getTokens,
 						pending,
-						users
+						users,
+						selectUser,
+						addUserDialog,
+						selectedUser,
+						user
           };
         },
       });
@@ -103,7 +175,12 @@
       });
 
 			app.component('p-inputtext', PrimeVue.InputText)
-					.component('p-button', PrimeVue.Button);
+					.component('p-button', PrimeVue.Button)
+					.component('p-dialog', PrimeVue.Dialog)
+					.component('p-password', PrimeVue.Password)
+					.component('p-tabs', PrimeVue.Tabs)
+					.component('p-tablist', PrimeVue.TabList)
+					.component('p-tab', PrimeVue.Tab);
 
       app.mount('#app');
     </script>
