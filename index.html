@@ -17,25 +17,22 @@
     <div id="app">
 			<p-button @click="addUserDialog = true" icon="pi pi-plus" rounded></p-button>
 			<hr>
-			<p-tabs value="0" scrollable>
+			<p-tabs :value="0" scrollable>
 				<tablist>
 						<p-tab v-for="(user, index) in users" :key="'users-'+index" :value="index" @click="selectUser(index)">
 								{{ user.login }}
 						</p-tab>
 				</tablist>
 			</p-tabs>
-			<template v-if="user">
-				<img :src="user.avatarUrl" class="w-24"/>
-				{{user.firstName}}
-				<br>
-				{{user.lastName}}
-				<br>
-				{{user.school.name}}
-				<br>
-				{{user.group.name}}
-			</template>
 			<template v-if="selectedUser">
-				{{selectedUser}}
+				<img :src="selectedUser.avatarUrl" class="w-24"/>
+				{{selectedUser.firstName}}
+				<br>
+				{{selectedUser.lastName}}
+				<br>
+				{{selectedUser.school.name}}
+				<br>
+				{{selectedUser.group.name}}
 			</template>
 			<p-dialog v-model:visible="addUserDialog" modal header="Добавить ученика" :style="{ width: '25rem' }">
 				<div class="flex items-center gap-4 mb-4">
@@ -67,7 +64,7 @@
       const app = createApp({
         setup() {
           const date = ref();
-					const selectedUser = ref({});
+					const selectedUser = ref();
 					const user = ref();
 					const cId = ref();
 					const cSecret = ref();
@@ -87,26 +84,50 @@
 						console.log('users', users.value)
 						localStorage.setItem('users', JSON.stringify(users.value));
 					}
+					const storageLastSelected = ()=> {
+						localStorage.setItem('lastSelected', JSON.stringify(selectedUser.value.login));
+					}
+					const getLastSelected = async ()=> {
+						return JSON.parse(localStorage.getItem('lastSelected'));
+					}
 					const getTokens = async (callback)=> {
+						if(users && findUser(login.value)) {
+							addUserDialog.value = false
+							return 
+						}
 						pending.value.login = true
 						try {
 							instance.defaults.headers.common['Access-Token'] = '';
 							const data = await instance.post('mobile/v7/authorizations/bycredentials', {"password":pass.value,"scope":"commoninfo,friendsandrelatives,educationalinfo","clientId":cId.value,"clientSecret":cSecret.value,"username":login.value})
 
 							pending.value.login = false
-							//this.config = data.data
-							console.log('data', data.data)
-							users.value.push({
+							let userObj = {
 								login: login.value,
 								access: data.data.credentials.accessToken,
 								refresh: data.data.credentials.refreshToken,
 								exp: data.data.credentials.expiresDate,
 								id: data.data.credentials.userId
-							})
-							console.log('users', users.value)
-							storageUsers();
-							console.log(data.data)
-							callback && callback();
+							};
+							/*users.value.push({
+								login: login.value,
+								access: data.data.credentials.accessToken,
+								refresh: data.data.credentials.refreshToken,
+								exp: data.data.credentials.expiresDate,
+								id: data.data.credentials.userId
+							})*/
+							console.log('user', userObj)
+							instance.defaults.headers.common['Access-Token'] = userObj.access;
+							const userInfo = await getUserInfo(userObj.id);
+							if(userInfo) {
+								console.log('userInfo', userInfo)
+								users.value.push(Object.assign(userObj, userInfo))
+								console.log('users.value', users.value)
+								storageUsers();
+								addUserDialog.value = false
+								callback && callback();
+								
+							}
+							
 							
 						} catch (error) {
 							if (error.response) {
@@ -115,8 +136,10 @@
 							}
 						}
 					}
-					const getUsers = ()=> {
-						users.value = JSON.parse(localStorage.getItem('users'));
+					const getUsers = async ()=> {
+						let usersFromStorage = JSON.parse(localStorage.getItem('users'));
+						usersFromStorage && (users.value = usersFromStorage);
+						
 						console.log('users',users.value)
 						
 					}
@@ -125,17 +148,17 @@
 						
 						selectedUser.value = users.value[index]
 						instance.defaults.headers.common['Access-Token'] = selectedUser.value.access;
-						console.log(instance)
 					}
-					const getUserInfo = async ()=> {
+					const getUserInfo = async (id)=> {
 						pending.value.userInfo = true
 						try {
-							const data = await instance.get(`/mobile/v7/users/${selectedUser.value.id}/context`)
+							const data = await instance.get(`/mobile/v7/users/${id}/context`)
 
 							pending.value.userInfo = false
 							//this.config = data.data
 							console.log('data', data.data.contextPersons[0])
-							user.value = data.data.contextPersons[0]
+							return data.data.contextPersons[0]
+							//user.value = data.data.contextPersons[0]
 							callback && callback();
 							
 						} catch (error) {
@@ -143,13 +166,30 @@
 								pending.value.userInfo = false
 								console.log(error.response.data.description);
 							}
+							return false;
 						}
 					}
-					onMounted(()=>{
-						getUsers()
+					const findUser = (login)=>{
+						return users.value.find(user => user.login === login);
+					}
+					onMounted(async ()=>{
+						await getUsers()
+						if(users.value) {
+							const lastSelected = await getLastSelected();
+							if(lastSelected) {
+								const lastSelectedUser = findUser(lastSelected);
+								if(lastSelectedUser) {
+									selectedUser.value = lastSelectedUser
+								} else {
+									selectUser(0);
+								}
+							} else {
+								selectUser(0);
+							}
+						}
 					})
 					watch(() => selectedUser, () => {
-						getUserInfo();
+						//getUserInfo();
 					}, { deep: true })
           return {
             date,
