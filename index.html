@@ -7,7 +7,8 @@
     <meta name="viewport" content="width=device-width" />
   </head>
   <body>
-    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+		<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
 		<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
 		<script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/primevue/umd/primevue.min.js"></script>
@@ -26,23 +27,13 @@
 			</p-tabs>
 			<template v-if="selectedUser">
 				<img :src="selectedUser.avatarUrl" class="w-24"/>
-				{{selectedUser.firstName}}
+				{{selectedUser.shortName}}
 				<br>
-				{{selectedUser.lastName}}
+				{{selectedUser.schools[0].name}}
 				<br>
-				{{selectedUser.school.name}}
-				<br>
-				{{selectedUser.group.name}}
+				{{selectedUser.eduGroups[0].name}}
 			</template>
 			<p-dialog v-model:visible="addUserDialog" modal header="Добавить ученика" :style="{ width: '25rem' }">
-				<div class="flex items-center gap-4 mb-4">
-						<label for="id" class="font-semibold w-24">id</label>
-						<p-inputtext v-model="cId" id="id" class="flex-auto" autocomplete="on" />
-				</div>
-				<div class="flex items-center gap-4 mb-4">
-					<label for="secret" class="font-semibold w-24">secret</label>
-					<p-inputtext v-model="cSecret" id="secret" class="flex-auto" autocomplete="on" />
-				</div>
 				<div class="flex items-center gap-4 mb-8">
 						<label for="login" class="font-semibold w-24">Логин</label>
 						<p-inputtext v-model="login" id="login" class="flex-auto" autocomplete="on" />
@@ -66,8 +57,8 @@
           const date = ref();
 					const selectedUser = ref();
 					const user = ref();
-					const cId = ref();
-					const cSecret = ref();
+					const cId = ref('387D44E3-E0C9-4265-A9E4-A4CAAAD5111C');
+					const cSecret = ref('8A7D709C-FDBB-4047-B0EA-8947AFE89D67');
 					const login = ref();
 					const pass = ref();
 					const users = ref([]);
@@ -103,8 +94,9 @@
 							pending.value.login = false
 							let userObj = {
 								login: login.value,
+								pass: pass.value,
 								access: data.data.credentials.accessToken,
-								refresh: data.data.credentials.refreshToken,
+								//refresh: data.data.credentials.refreshToken,
 								exp: data.data.credentials.expiresDate,
 								id: data.data.credentials.userId
 							};
@@ -136,6 +128,39 @@
 							}
 						}
 					}
+					const refreshToken = async (user)=> {
+						console.log('refreshToken')
+						console.log(user)
+						pending.value.login = true
+						try {
+							instance.defaults.headers.common['Access-Token'] = '';
+							const data = await instance.post('mobile/v7/authorizations/bycredentials', {"password":user.pass,"scope":"commoninfo,friendsandrelatives,educationalinfo","clientId":cId.value,"clientSecret":cSecret.value,"username":user.login})
+
+							pending.value.login = false
+
+							let userObj = {
+								access: data.data.credentials.accessToken,
+								exp: data.data.credentials.expiresDate,
+							};
+							instance.defaults.headers.common['Access-Token'] = userObj.access;
+							const userInfo = await getUserInfo(data.data.credentials.userId);
+							if(userInfo) {
+								const userInUsers = findUser(user.login)
+								//console.log('userInfo', userInfo)
+								Object.assign(userInUsers, userObj)
+								console.log('users.value', users.value)
+								storageUsers();
+								addUserDialog.value = false
+								callback && callback();
+								
+							}
+						} catch (error) {
+							if (error.response) {
+								pending.value.login = false
+								console.log(error.response.data.description);
+							}
+						}
+					} 
 					const getUsers = async ()=> {
 						let usersFromStorage = JSON.parse(localStorage.getItem('users'));
 						usersFromStorage && (users.value = usersFromStorage);
@@ -143,21 +168,25 @@
 						console.log('users',users.value)
 						
 					}
-					const selectUser = (index)=> {
+					const selectUser = async (index) => {
 						console.log('selectUser', users.value[index])
 						
 						selectedUser.value = users.value[index]
 						instance.defaults.headers.common['Access-Token'] = selectedUser.value.access;
+						if(dayjs(selectedUser.value.exp)<dayjs(Date.now())) {
+							refreshToken(selectedUser.value);
+						}
+						getHomeworks();
 					}
 					const getUserInfo = async (id)=> {
 						pending.value.userInfo = true
 						try {
-							const data = await instance.get(`/mobile/v7/users/${id}/context`)
+							const data = await instance.get(`/v2/users/${id}/context`)
 
 							pending.value.userInfo = false
 							//this.config = data.data
-							console.log('data', data.data.contextPersons[0])
-							return data.data.contextPersons[0]
+							console.log('data', data.data)
+							return data.data
 							//user.value = data.data.contextPersons[0]
 							callback && callback();
 							
@@ -172,7 +201,29 @@
 					const findUser = (login)=>{
 						return users.value.find(user => user.login === login);
 					}
+					const getHomeworks = async ()=> {
+						console.log('get shedule');
+						pending.value.diary = true;
+						try {
+							//const data = await instance.get(`/v2/persons/${selectedUser.value.personId}/groups/${selectedUser.value.eduGroups[0].id_str}/schedules`)
+							const data = await instance.get(`/v2/users/me/school/${selectedUser.value.schoolIds[0]}/homeworks`, {
+								params: {	
+									startDate: '2024-09-30',
+									endDate: '2024-10-4'
+								}
+							})
+							pending.value.diary = false
+							console.log('data', data)
+						} catch (error) {
+							console.log(error)
+							if (error.response) {
+								pending.value.diary = false
+								console.log(error.response.data.description);
+							}
+						}
+					}
 					onMounted(async ()=>{
+						console.log('dayjs ',dayjs().format())
 						await getUsers()
 						if(users.value) {
 							const lastSelected = await getLastSelected();
