@@ -1,279 +1,374 @@
-
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <title>PrimeVue + CDN</title>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width" />
-  </head>
-  <body>
-		<script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
-		<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-		<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
-		<script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/primevue/umd/primevue.min.js"></script>
-    <script src="https://unpkg.com/@primevue/themes/umd/aura.min.js"></script>
-		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/primeicons/7.0.0/primeicons.min.css" integrity="sha512-AmPkAwXBnEkMWvc+V9PvjVgFmJWB3HKMSgBJolV4LMXwAwoFTAlk5WY1yiz504VynFGQLwiLVp/JqlcWxAEmJw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 
-    <div id="app">
-			<p-button @click="addUserDialog = true" icon="pi pi-plus" rounded></p-button>
-			<hr>
-			<p-tabs :value="0" scrollable>
-				<tablist>
-						<p-tab v-for="(user, index) in users" :key="'users-'+index" :value="index" @click="selectUser(index)">
-								{{ user.login }}
-						</p-tab>
-				</tablist>
-			</p-tabs>
-			<template v-if="selectedUser">
-				<img :src="selectedUser.avatarUrl" class="w-24"/>
-				{{selectedUser.shortName}}
-				<br>
-				{{selectedUser.schools[0].name}}
-				<br>
-				{{selectedUser.eduGroups[0].name}}
-			</template>
-			<p-dialog v-model:visible="addUserDialog" modal header="Добавить ученика" :style="{ width: '25rem' }">
-				<div class="flex items-center gap-4 mb-8">
-						<label for="login" class="font-semibold w-24">Логин</label>
-						<p-inputtext v-model="login" id="login" class="flex-auto" autocomplete="on" />
-				</div>
-				<div class="flex items-center gap-4 mb-8">
-					<label for="password" class="font-semibold w-24">Пароль</label>
-					<p-password v-model="pass" id="password" toggle-mask :feedback="false" class="flex-auto"/>
-				</div>
-				<div class="flex justify-end gap-2">
-						<p-button label="Добавить" @click="getTokens()"></p-button>
-						<p-button type="button" label="Отмена" @click="addUserDialog = false"></p-button>
-				</div>
+<head>
+	<title>Кунделик</title>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width" />
+</head>
+
+<body>
+	<script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+	<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+	<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+	<script src="https://cdn.tailwindcss.com"></script>
+	<script src="https://unpkg.com/primevue/umd/primevue.min.js"></script>
+	<script src="https://unpkg.com/@primevue/themes/umd/aura.min.js"></script>
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/primeicons/7.0.0/primeicons.min.css" integrity="sha512-AmPkAwXBnEkMWvc+V9PvjVgFmJWB3HKMSgBJolV4LMXwAwoFTAlk5WY1yiz504VynFGQLwiLVp/JqlcWxAEmJw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+	<div id="app">
+		<p-button @click="addUserDialog = true" icon="pi pi-plus" rounded></p-button>
+		<hr>
+		<p-tabs :value="0" scrollable>
+			<tablist>
+				<p-tab v-for="(user, index) in users" :key="'users-'+index" :value="index" @click="selectUser(index)">
+					{{ user.login }}
+				</p-tab>
+			</tablist>
+		</p-tabs>
+		<template v-if="selectedUser">
+			<img :src="selectedUser.avatarUrl" class="w-24" />
+			{{selectedUser.shortName}}
+			<br>
+			{{selectedUser.schools[0].name}}
+			<br>
+			{{selectedUser.eduGroups[0].name}}
+			<div v-if="homeworks" class="flex">
+				<p-card v-for="(homework, index) in homeworks" :key="'homeworks-'+index" class="flex-auto">
+					<template #content>
+						{{formatDate(homework.date)}}
+						<br>
+						<div >
+							<div v-for="(lesson, index) in homework.lessons" :key="'lesson-'+index" class="mb-2">
+								<div v-if="lesson"><strong>{{index + 1}}. {{lesson.name}}</strong> <br> {{lesson.theme}}</div>
+							</div>
+						</div>
+					</template>
+				</p-card>
+			</div>
+		</template>
+		<p-dialog v-model:visible="addUserDialog" modal header="Добавить ученика" :style="{ width: '25rem' }">
+			<div class="flex items-center gap-4 mb-8">
+				<label for="login" class="font-semibold w-24">Логин</label>
+				<p-inputtext v-model="login" id="login" class="flex-auto" autocomplete="on" />
+			</div>
+			<div class="flex items-center gap-4 mb-8">
+				<label for="password" class="font-semibold w-24">Пароль</label>
+				<p-password v-model="pass" id="password" toggle-mask :feedback="false" class="flex-auto" />
+			</div>
+			<div class="flex justify-end gap-2">
+				<p-button label="Добавить" @click="getTokens()"></p-button>
+				<p-button type="button" label="Отмена" @click="addUserDialog = false"></p-button>
+			</div>
 		</p-dialog>
-    </div>
+	</div>
 
-    <script>
-      const { createApp, ref, onMounted, watch } = Vue;
+	<script>
+		const {
+			createApp,
+			ref,
+			onMounted,
+			watch
+		} = Vue;
 
-      const app = createApp({
-        setup() {
-          const date = ref();
-					const selectedUser = ref();
-					const user = ref();
-					const cId = ref('387D44E3-E0C9-4265-A9E4-A4CAAAD5111C');
-					const cSecret = ref('8A7D709C-FDBB-4047-B0EA-8947AFE89D67');
-					const login = ref();
-					const pass = ref();
-					const users = ref([]);
-					const pending = ref({
-						login: false,
-						userInfo: false
-					});
-					const addUserDialog = ref(false);
-					const instance = axios.create({
-						baseURL: 'https://api.kundelik.kz/',
-						timeout: 1000,
-					});
-					const storageUsers = ()=> {
-						console.log('users', users.value)
-						localStorage.setItem('users', JSON.stringify(users.value));
+		const app = createApp({
+			setup() {
+				const date = ref();
+				const selectedUser = ref();
+				const user = ref();
+				const cId = ref('387D44E3-E0C9-4265-A9E4-A4CAAAD5111C');
+				const cSecret = ref('8A7D709C-FDBB-4047-B0EA-8947AFE89D67');
+				const login = ref();
+				const pass = ref();
+				const users = ref([]);
+				const pending = ref({
+					login: false,
+					userInfo: false,
+					homeworks: false
+				});
+				const homeworksData= ref(null);
+				const homeworks = ref([]);
+				const range = ref([]);
+				const addUserDialog = ref(false);
+				const instance = axios.create({
+					baseURL: 'https://api.kundelik.kz/'
+				});
+				const storageUsers = () => {
+					console.log('users', users.value)
+					localStorage.setItem('users', JSON.stringify(users.value));
+				}
+				const storageLastSelected = () => {
+					localStorage.setItem('lastSelected', JSON.stringify(selectedUser.value.login));
+				}
+				const getLastSelected = async () => {
+					return JSON.parse(localStorage.getItem('lastSelected'));
+				}
+				const getTokens = async (callback) => {
+					if (users && findUser(login.value)) {
+						addUserDialog.value = false
+						return
 					}
-					const storageLastSelected = ()=> {
-						localStorage.setItem('lastSelected', JSON.stringify(selectedUser.value.login));
-					}
-					const getLastSelected = async ()=> {
-						return JSON.parse(localStorage.getItem('lastSelected'));
-					}
-					const getTokens = async (callback)=> {
-						if(users && findUser(login.value)) {
+					pending.value.login = true
+					try {
+						instance.defaults.headers.common['Access-Token'] = '';
+						const data = await instance.post('mobile/v7/authorizations/bycredentials', {
+							"password": pass.value,
+							"scope": "commoninfo,friendsandrelatives,educationalinfo",
+							"clientId": cId.value,
+							"clientSecret": cSecret.value,
+							"username": login.value
+						})
+
+						pending.value.login = false
+						let userObj = {
+							login: login.value,
+							pass: pass.value,
+							access: data.data.credentials.accessToken,
+							//refresh: data.data.credentials.refreshToken,
+							exp: data.data.credentials.expiresDate,
+							id: data.data.credentials.userId
+						};
+						/*users.value.push({
+							login: login.value,
+							access: data.data.credentials.accessToken,
+							refresh: data.data.credentials.refreshToken,
+							exp: data.data.credentials.expiresDate,
+							id: data.data.credentials.userId
+						})*/
+						console.log('user', userObj)
+						instance.defaults.headers.common['Access-Token'] = userObj.access;
+						const userInfo = await getUserInfo(userObj.id);
+						if (userInfo) {
+							console.log('userInfo', userInfo)
+							users.value.push(Object.assign(userObj, userInfo))
+							console.log('users.value', users.value)
+							storageUsers();
 							addUserDialog.value = false
-							return 
-						}
-						pending.value.login = true
-						try {
-							instance.defaults.headers.common['Access-Token'] = '';
-							const data = await instance.post('mobile/v7/authorizations/bycredentials', {"password":pass.value,"scope":"commoninfo,friendsandrelatives,educationalinfo","clientId":cId.value,"clientSecret":cSecret.value,"username":login.value})
-
-							pending.value.login = false
-							let userObj = {
-								login: login.value,
-								pass: pass.value,
-								access: data.data.credentials.accessToken,
-								//refresh: data.data.credentials.refreshToken,
-								exp: data.data.credentials.expiresDate,
-								id: data.data.credentials.userId
-							};
-							/*users.value.push({
-								login: login.value,
-								access: data.data.credentials.accessToken,
-								refresh: data.data.credentials.refreshToken,
-								exp: data.data.credentials.expiresDate,
-								id: data.data.credentials.userId
-							})*/
-							console.log('user', userObj)
-							instance.defaults.headers.common['Access-Token'] = userObj.access;
-							const userInfo = await getUserInfo(userObj.id);
-							if(userInfo) {
-								console.log('userInfo', userInfo)
-								users.value.push(Object.assign(userObj, userInfo))
-								console.log('users.value', users.value)
-								storageUsers();
-								addUserDialog.value = false
-								callback && callback();
-								
-							}
-							
-							
-						} catch (error) {
-							if (error.response) {
-								pending.value.login = false
-								console.log(error.response.data.description);
-							}
-						}
-					}
-					const refreshToken = async (user)=> {
-						console.log('refreshToken')
-						console.log(user)
-						pending.value.login = true
-						try {
-							instance.defaults.headers.common['Access-Token'] = '';
-							const data = await instance.post('mobile/v7/authorizations/bycredentials', {"password":user.pass,"scope":"commoninfo,friendsandrelatives,educationalinfo","clientId":cId.value,"clientSecret":cSecret.value,"username":user.login})
-
-							pending.value.login = false
-
-							let userObj = {
-								access: data.data.credentials.accessToken,
-								exp: data.data.credentials.expiresDate,
-							};
-							instance.defaults.headers.common['Access-Token'] = userObj.access;
-							const userInfo = await getUserInfo(data.data.credentials.userId);
-							if(userInfo) {
-								const userInUsers = findUser(user.login)
-								//console.log('userInfo', userInfo)
-								Object.assign(userInUsers, userObj)
-								console.log('users.value', users.value)
-								storageUsers();
-								addUserDialog.value = false
-								callback && callback();
-								
-							}
-						} catch (error) {
-							if (error.response) {
-								pending.value.login = false
-								console.log(error.response.data.description);
-							}
-						}
-					} 
-					const getUsers = async ()=> {
-						let usersFromStorage = JSON.parse(localStorage.getItem('users'));
-						usersFromStorage && (users.value = usersFromStorage);
-						
-						console.log('users',users.value)
-						
-					}
-					const selectUser = async (index) => {
-						console.log('selectUser', users.value[index])
-						
-						selectedUser.value = users.value[index]
-						instance.defaults.headers.common['Access-Token'] = selectedUser.value.access;
-						if(dayjs(selectedUser.value.exp)<dayjs(Date.now())) {
-							refreshToken(selectedUser.value);
-						}
-						getHomeworks();
-					}
-					const getUserInfo = async (id)=> {
-						pending.value.userInfo = true
-						try {
-							const data = await instance.get(`/v2/users/${id}/context`)
-
-							pending.value.userInfo = false
-							//this.config = data.data
-							console.log('data', data.data)
-							return data.data
-							//user.value = data.data.contextPersons[0]
 							callback && callback();
-							
-						} catch (error) {
-							if (error.response) {
-								pending.value.userInfo = false
-								console.log(error.response.data.description);
-							}
-							return false;
+
+						}
+
+
+					} catch (error) {
+						if (error.response) {
+							pending.value.login = false
+							console.log(error.response.data.description);
 						}
 					}
-					const findUser = (login)=>{
-						return users.value.find(user => user.login === login);
-					}
-					const getHomeworks = async ()=> {
-						console.log('get shedule');
-						pending.value.diary = true;
-						try {
-							//const data = await instance.get(`/v2/persons/${selectedUser.value.personId}/groups/${selectedUser.value.eduGroups[0].id_str}/schedules`)
-							const data = await instance.get(`/v2/users/me/school/${selectedUser.value.schoolIds[0]}/homeworks`, {
-								params: {	
-									startDate: '2024-09-30',
-									endDate: '2024-10-4'
-								}
-							})
-							pending.value.diary = false
-							console.log('data', data)
-						} catch (error) {
-							console.log(error)
-							if (error.response) {
-								pending.value.diary = false
-								console.log(error.response.data.description);
-							}
+				}
+				const refreshToken = async (user) => {
+					console.log('refreshToken')
+					console.log(user)
+					pending.value.login = true
+					try {
+						instance.defaults.headers.common['Access-Token'] = '';
+						const data = await instance.post('mobile/v7/authorizations/bycredentials', {
+							"password": user.pass,
+							"scope": "commoninfo,friendsandrelatives,educationalinfo",
+							"clientId": cId.value,
+							"clientSecret": cSecret.value,
+							"username": user.login
+						})
+
+						pending.value.login = false
+
+						let userObj = {
+							access: data.data.credentials.accessToken,
+							exp: data.data.credentials.expiresDate,
+						};
+						instance.defaults.headers.common['Access-Token'] = userObj.access;
+						const userInfo = await getUserInfo(data.data.credentials.userId);
+						if (userInfo) {
+							const userInUsers = findUser(user.login)
+							//console.log('userInfo', userInfo)
+							Object.assign(userInUsers, userObj)
+							console.log('users.value', users.value)
+							storageUsers();
+							addUserDialog.value = false
+							callback && callback();
+
+						}
+					} catch (error) {
+						if (error.response) {
+							pending.value.login = false
+							console.log(error.response.data.description);
 						}
 					}
-					onMounted(async ()=>{
-						console.log('dayjs ',dayjs().format())
-						await getUsers()
-						if(users.value) {
-							const lastSelected = await getLastSelected();
-							if(lastSelected) {
-								const lastSelectedUser = findUser(lastSelected);
-								if(lastSelectedUser) {
-									selectedUser.value = lastSelectedUser
-								} else {
-									selectUser(0);
-								}
+				}
+				const getUsers = async () => {
+					let usersFromStorage = JSON.parse(localStorage.getItem('users'));
+					usersFromStorage && (users.value = usersFromStorage);
+
+					console.log('users', users.value)
+
+				}
+				const selectUser = async (index) => {
+					console.log('selectUser', users.value[index])
+
+					selectedUser.value = users.value[index]
+					instance.defaults.headers.common['Access-Token'] = selectedUser.value.access;
+					if (dayjs(selectedUser.value.exp) < dayjs(Date.now())) {
+						refreshToken(selectedUser.value);
+					}
+					homeworks.value = await getHomeworks(...getCurrentWeek());
+				}
+				const getUserInfo = async (id) => {
+					pending.value.userInfo = true
+					try {
+						const data = await instance.get(`/v2/users/${id}/context`)
+
+						pending.value.userInfo = false
+						//this.config = data.data
+						console.log('data', data.data)
+						return data.data
+						//user.value = data.data.contextPersons[0]
+						callback && callback();
+
+					} catch (error) {
+						if (error.response) {
+							pending.value.userInfo = false
+							console.log(error.response.data.description);
+						}
+						return false;
+					}
+				}
+				const findUser = (login) => {
+					return users.value.find(user => user.login === login);
+				}
+				const getHomeworks = async (startDate, endDate) => {
+					console.log('get shedule');
+					pending.value.homeworks = true;
+					try {
+						//const data = await instance.get(`/v2/persons/${selectedUser.value.personId}/groups/${selectedUser.value.eduGroups[0].id_str}/schedules`)
+						const data = await instance.get(`/v2/users/me/school/${selectedUser.value.schoolIds[0]}/homeworks`, {
+							params: {
+								startDate:dayjs(startDate).format('YYYY-MM-DD'),
+								endDate:dayjs(endDate).format('YYYY-MM-DD')
+							}
+						})
+						pending.value.homeworks = false
+						console.log('data', data)
+						homeworksData.value = data.data
+						formatHomeworks(getDatesRange(startDate, endDate))
+						console.log('homeworksget',homeworks.value)
+					} catch (error) {
+						console.log(error)
+						if (error.response) {
+							pending.value.homeworks = false
+							console.log(error.response.data.description);
+						}
+					}
+				}
+				const formatHomeworks = (range) => {
+					const length = range.length;
+					for (let i = 0; i < length; i++) {
+						homeworks.value[i] = {};
+						homeworks.value[i].date = range[i];
+						homeworks.value[i].lessons = [];
+					}
+					console.log('homeworks',homeworks.value)
+					homeworksData.value.lessons.forEach(lesson => {
+						const date = dayjs(lesson.date);
+						const homework = homeworks.value.find(work => {
+							return date.isSame(work.date, 'day')
+						})
+						homework.lessons[lesson.number] = {
+							name:getSubjectName(lesson.subjectId),
+							theme:lesson.title,
+							works:getWorks(lesson.works)
+						};
+					})
+					console.log('homeworks',homeworks.value)
+				}
+				const getCurrentWeek = () => {
+					const days = [1, 7, 6, 5, 4, 3, 2];
+					let date = new Date();
+					let day = days[date.getDay()];
+					let dayNum = day ? day - 1 : 6;
+					let startDate = new Date();
+					startDate = dayjs(startDate).subtract(dayNum, 'day').toDate();
+					let endDate = new Date();
+					endDate=dayjs(startDate).add(6, 'day').toDate();
+					return [startDate, endDate];
+				}
+				const getDatesRange = (startDate, endDate) => {
+					let dates = [];
+					while (startDate <= endDate) {
+						dates.push(new Date(startDate));
+						startDate.setDate(startDate.getDate() + 1);
+					}
+					return dates;
+				}
+				const getSubjectName = (id) => {
+					return homeworksData.value.subjects.find(subject => subject.id === id).name
+				}
+				const getWorks = (works) => {
+					return works.map(work => {getWork(work).text})
+				}
+				const getWork = (work) => {
+					return homeworksData.value.works.find(w => w.id === work)
+				}
+				const formatDate = (date) => {
+					return dayjs(date).format('DD.MM.YYYY')
+				}
+				onMounted(async () => {
+					console.log('dayjs ', dayjs().format())
+					await getUsers()
+					if (users.value) {
+						const lastSelected = await getLastSelected();
+						if (lastSelected) {
+							const lastSelectedUser = findUser(lastSelected);
+							if (lastSelectedUser) {
+								selectedUser.value = lastSelectedUser
 							} else {
 								selectUser(0);
 							}
+						} else {
+							selectUser(0);
 						}
-					})
-					watch(() => selectedUser, () => {
-						//getUserInfo();
-					}, { deep: true })
-          return {
-            date,
-						cId,
-						cSecret,
-						login,
-						pass,
-						getTokens,
-						pending,
-						users,
-						selectUser,
-						addUserDialog,
-						selectedUser,
-						user
-          };
-        },
-      });
+					}
+				})
+				watch(() => selectedUser, () => {
+					//getUserInfo();
+				}, {
+					deep: true
+				})
+				return {
+					date,
+					cId,
+					cSecret,
+					login,
+					pass,
+					getTokens,
+					pending,
+					users,
+					selectUser,
+					addUserDialog,
+					selectedUser,
+					user,
+					homeworks:homeworks.value,
+					formatDate
+				};
+			},
+		});
 
-      app.use(PrimeVue.Config, {
-        theme: {
-            preset: PrimeVue.Themes.Aura
-        }
-      });
+		app.use(PrimeVue.Config, {
+			theme: {
+				preset: PrimeVue.Themes.Aura
+			}
+		});
 
-			app.component('p-inputtext', PrimeVue.InputText)
-					.component('p-button', PrimeVue.Button)
-					.component('p-dialog', PrimeVue.Dialog)
-					.component('p-password', PrimeVue.Password)
-					.component('p-tabs', PrimeVue.Tabs)
-					.component('p-tablist', PrimeVue.TabList)
-					.component('p-tab', PrimeVue.Tab);
+		app.component('p-inputtext', PrimeVue.InputText)
+			.component('p-button', PrimeVue.Button)
+			.component('p-dialog', PrimeVue.Dialog)
+			.component('p-password', PrimeVue.Password)
+			.component('p-tabs', PrimeVue.Tabs)
+			.component('p-tablist', PrimeVue.TabList)
+			.component('p-tab', PrimeVue.Tab)
+			.component('p-card', PrimeVue.Card);
 
-      app.mount('#app');
-    </script>
-  </body>
+		app.mount('#app');
+	</script>
+</body>
+
 </html>
