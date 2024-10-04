@@ -8,7 +8,9 @@
 </head>
 
 <body>
+	<script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-element-bundle.min.js"></script>
 	<script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/dayjs@1/locale/ru.js"></script>
 	<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
 	<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
 	<script src="https://cdn.tailwindcss.com"></script>
@@ -17,34 +19,58 @@
 	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/primeicons/7.0.0/primeicons.min.css" integrity="sha512-AmPkAwXBnEkMWvc+V9PvjVgFmJWB3HKMSgBJolV4LMXwAwoFTAlk5WY1yiz504VynFGQLwiLVp/JqlcWxAEmJw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 
 	<div id="app">
-		<p-button @click="addUserDialog = true" icon="pi pi-plus" rounded></p-button>
-		<hr>
-		<p-tabs :value="0" scrollable>
-			<tablist>
-				<p-tab v-for="(user, index) in users" :key="'users-'+index" :value="index" @click="selectUser(index)">
-					{{ user.login }}
-				</p-tab>
-			</tablist>
-		</p-tabs>
+		<div class="flex items-center px-1 w-full">
+			<p-button @click="addUserDialog = true" icon="pi pi-plus" rounded class="flex-none"></p-button>
+			<p-tabs :value="0" scrollable style="width: calc(100% - 40px);">
+				<p-tablist>
+					<p-tab v-for="(user, index) in users" :key="'users-'+index" :value="index" @click="selectUser(index)">
+						{{ user.shortName}}, {{user.eduGroups[0].name }}
+					</p-tab>
+				</p-tablist>
+			</p-tabs>
+		</div>
+		
+		<hr class="mb-1">
+		<div class="flex px-4">
+			<div class="mr-auto">
+				<template v-if="pending.login">привзяка ученика...</template>
+				<template v-if="pending.userInfo">получение информации об ученике...</template>
+				<template v-if="pending.shedule">получение расписания...</template>
+			</div>
+			<div class="ml-auto">
+				<p-button icon="pi pi-arrow-left" severity="secondary" size="small" @click="prevWeek()"></p-button>
+				{{formatDate(week[0])}} - {{formatDate(week[1])}}
+				<p-button icon="pi pi-arrow-right" severity="secondary" size="small" @click="nextWeek()"></p-button>
+			</div>
+		</div>
+		<hr class="mt-1 mb-4">
+		
 		<template v-if="selectedUser">
-			<img :src="selectedUser.avatarUrl" class="w-24" />
-			{{selectedUser.shortName}}
-			<br>
-			{{selectedUser.schools[0].name}}
-			<br>
-			{{selectedUser.eduGroups[0].name}}
-			<div v-if="homeworks" class="flex">
-				<p-card v-for="(homework, index) in homeworks" :key="'homeworks-'+index" class="flex-auto">
-					<template #content>
-						{{formatDate(homework.date)}}
-						<br>
-						<div >
-							<div v-for="(lesson, index) in homework.lessons" :key="'lesson-'+index" class="mb-2">
-								<div v-if="lesson"><strong>{{index + 1}}. {{lesson.name}}</strong> <br> {{lesson.theme}}</div>
-							</div>
-						</div>
-					</template>
-				</p-card>
+			
+			
+			<div v-if="homeworks">
+				<swiper-container slides-per-view="auto" space-between="30" free-mode-enabled="true" free-mode-sticky="true" >
+					<swiper-slide v-for="(homework, index) in homeworks" :key="'homeworks-'+index" class="w-auto h-auto">
+						<p-card class="w-72 h-full">
+							<template #content>
+								{{formatDate(homework.date, true)}}
+								<br>
+								<div >
+									<div v-for="(lesson, index) in homework.lessons" :key="'lesson-'+index" class="mb-3">
+										<div v-if="lesson">
+											<strong>{{index + 1}}. {{lesson.name}}</strong> 
+											<div class="text-xs">{{lesson.theme}}</div>
+											<div v-if="lesson.works" class="bg-gray-100">
+												<p v-for="(work, index) in lesson.works" :key="'work-'+index" class="p-1 mb-1">{{work}}</p>
+											</div>
+										</div>
+									</div>
+								</div>
+							</template>
+						</p-card>
+					</swiper-slide>
+				</swiper-container>
+				
 			</div>
 		</template>
 		<p-dialog v-model:visible="addUserDialog" modal header="Добавить ученика" :style="{ width: '25rem' }">
@@ -64,11 +90,14 @@
 	</div>
 
 	<script>
+		
 		const {
 			createApp,
 			ref,
 			onMounted,
-			watch
+			onBeforeMount,
+			watch,
+			computed
 		} = Vue;
 
 		const app = createApp({
@@ -87,9 +116,44 @@
 					homeworks: false
 				});
 				const homeworksData= ref(null);
-				const homeworks = ref([]);
-				const range = ref([]);
+				const marksData = ref(null);
+				const sheduleData = ref(null);
+				//const homeworks = ref([]);
+				const monday = ref(null);
 				const addUserDialog = ref(false);
+				const week = computed(() => {
+					if(monday.value === null) return [];
+					return [monday.value, dayjs(monday.value).add(6, 'day').toDate()]
+				})
+				const homeworks = computed(() => {
+					if(homeworksData.value === null) return [];
+					let homeworks = [];
+					//const week = getWeek();
+					const range = getDatesRange(week.value[0], week.value[1]);
+					const length = range.length;
+					for (let i = 0; i < length; i++) {
+						homeworks[i] = {};
+						homeworks[i].date = range[i];
+						homeworks[i].lessons = [];
+					}
+					
+					homeworksData.value.lessons.forEach(lesson => {
+						const date = dayjs(lesson.date);
+						const homework = homeworks.find(work => {
+							return date.isSame(work.date, 'day')
+						})
+						if(homework){
+							homework.lessons[lesson.number] = {
+								name:getSubjectName(lesson.subjectId),
+								theme:lesson.title,
+								works:getWorks(lesson.works)
+							};
+						}
+					})
+					console.log('homeworks',homeworks)
+					return homeworks
+				})
+
 				const instance = axios.create({
 					baseURL: 'https://api.kundelik.kz/'
 				});
@@ -210,7 +274,8 @@
 					if (dayjs(selectedUser.value.exp) < dayjs(Date.now())) {
 						refreshToken(selectedUser.value);
 					}
-					homeworks.value = await getHomeworks(...getCurrentWeek());
+					monday.value = getMonday(new Date());
+					//homeworks.value = await getHomeworks(...getWeek());
 				}
 				const getUserInfo = async (id) => {
 					pending.value.userInfo = true
@@ -236,7 +301,7 @@
 					return users.value.find(user => user.login === login);
 				}
 				const getHomeworks = async (startDate, endDate) => {
-					console.log('get shedule');
+					console.log('get homeworks');
 					pending.value.homeworks = true;
 					try {
 						//const data = await instance.get(`/v2/persons/${selectedUser.value.personId}/groups/${selectedUser.value.eduGroups[0].id_str}/schedules`)
@@ -247,10 +312,9 @@
 							}
 						})
 						pending.value.homeworks = false
-						console.log('data', data)
+						console.log('homeworksData', data)
 						homeworksData.value = data.data
-						formatHomeworks(getDatesRange(startDate, endDate))
-						console.log('homeworksget',homeworks.value)
+						//formatHomeworks(getDatesRange(startDate, endDate))
 					} catch (error) {
 						console.log(error)
 						if (error.response) {
@@ -259,7 +323,46 @@
 						}
 					}
 				}
-				const formatHomeworks = (range) => {
+				const getMarks = async (startDate, endDate) => {
+					console.log('get marks');
+					pending.value.marks = true;
+					try {
+						const data = await instance.get(`/v2/persons/${selectedUser.value.personId}/schools/${selectedUser.value.schoolIds[0]}/marks/${dayjs(startDate).format('YYYY-MM-DD')}/${dayjs(endDate).format('YYYY-MM-DD')}`,)
+						pending.value.marks = false
+						console.log('marksData', data)
+						marksData.value = data.data
+						
+					} catch (error) {
+						console.log(error)
+						if (error.response) {
+							pending.value.marks = false
+							console.log(error.response.data.description);
+						}
+					}
+				}
+				const getShedule = async (startDate, endDate) => {
+					console.log('get shedule');
+					pending.value.shedule = true;
+					try {
+						const data = await instance.get(`/v2/persons/${selectedUser.value.personId}/groups/${selectedUser.value.eduGroups[0].id_str}/schedules`, {
+							params: {
+								startDate:dayjs(startDate).format('YYYY-MM-DD'),
+								endDate:dayjs(endDate).format('YYYY-MM-DD')
+							}
+						})
+						pending.value.shedule = false
+						console.log('sheduleData', data)
+						sheduleData.value = data.data
+					} catch (error) {
+						console.log(error)
+						if (error.response) {
+							pending.value.shedule = false
+							console.log(error.response.data.description);
+						}
+					}
+				}
+				/*const formatHomeworks = (range) => {
+					if(!homeworks.value) return;
 					const length = range.length;
 					for (let i = 0; i < length; i++) {
 						homeworks.value[i] = {};
@@ -279,23 +382,32 @@
 						};
 					})
 					console.log('homeworks',homeworks.value)
-				}
+				}*/
 				const getCurrentWeek = () => {
-					const days = [1, 7, 6, 5, 4, 3, 2];
+					const days = [6, 0, 1, 2, 3, 4, 5];
 					let date = new Date();
 					let day = days[date.getDay()];
-					let dayNum = day ? day - 1 : 6;
+					//let dayNum = day ? day - 1 : 6;
 					let startDate = new Date();
-					startDate = dayjs(startDate).subtract(dayNum, 'day').toDate();
+					startDate = dayjs(startDate).subtract(day, 'day').toDate();
 					let endDate = new Date();
 					endDate=dayjs(startDate).add(6, 'day').toDate();
 					return [startDate, endDate];
 				}
+				/*const getWeek = () => {
+					return [monday.value, dayjs(monday.value).add(6, 'day').toDate()]
+				}*/
+				const getMonday = (date) => {
+					const days = [6, 0, 1, 2, 3, 4, 5];
+					let day = days[date.getDay()];
+					return dayjs(date).subtract(day, 'day').toDate();
+				}
 				const getDatesRange = (startDate, endDate) => {
 					let dates = [];
-					while (startDate <= endDate) {
-						dates.push(new Date(startDate));
-						startDate.setDate(startDate.getDate() + 1);
+					let date = new Date(startDate);
+					while (date <= endDate) {
+						dates.push(new Date(date));
+						date.setDate(date.getDate() + 1);
 					}
 					return dates;
 				}
@@ -303,16 +415,30 @@
 					return homeworksData.value.subjects.find(subject => subject.id === id).name
 				}
 				const getWorks = (works) => {
-					return works.map(work => {getWork(work).text})
+					return works.map(work => getWork(work).text)
 				}
 				const getWork = (work) => {
 					return homeworksData.value.works.find(w => w.id === work)
 				}
-				const formatDate = (date) => {
-					return dayjs(date).format('DD.MM.YYYY')
+				const formatDate = (date, withDayOfWeek) => {
+					return dayjs(date).locale('ru').format(withDayOfWeek?'DD.MM.YYYY (dddd)':'DD.MM.YYYY')
 				}
+				const changeMonday = (backward) => {
+					const mon = dayjs(monday.value);
+					monday.value = backward?mon.subtract(7, 'day').toDate():mon.add(7, 'day').toDate();
+				}
+				const nextWeek = () => {
+					changeMonday(false);
+				}
+				const prevWeek = () => {
+					changeMonday(true);
+				}
+				onBeforeMount(async () => {
+					
+				})
 				onMounted(async () => {
 					console.log('dayjs ', dayjs().format())
+					
 					await getUsers()
 					if (users.value) {
 						const lastSelected = await getLastSelected();
@@ -328,10 +454,13 @@
 						}
 					}
 				})
-				watch(() => selectedUser, () => {
+				watch(monday, async () => {
+					if(selectedUser.value) {
+						homeworks.value = await getHomeworks(...week.value);
+						getMarks(...week.value)
+						getShedule(...week.value)
+					}
 					//getUserInfo();
-				}, {
-					deep: true
 				})
 				return {
 					date,
@@ -346,8 +475,11 @@
 					addUserDialog,
 					selectedUser,
 					user,
-					homeworks:homeworks.value,
-					formatDate
+					homeworks,
+					formatDate,
+					week,
+					prevWeek,
+					nextWeek,
 				};
 			},
 		});
