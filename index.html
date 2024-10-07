@@ -21,7 +21,7 @@
 	<div id="app">
 		<div class="flex items-center px-1 w-full">
 			<p-button @click="addUserDialog = true" icon="pi pi-plus" rounded class="flex-none"></p-button>
-			<p-tabs :value="0" scrollable style="width: calc(100% - 40px);">
+			<p-tabs v-if="users" :value="0" scrollable style="width: calc(100% - 40px);">
 				<p-tablist>
 					<p-tab v-for="(user, index) in users" :key="'users-'+index" :value="index" @click="selectUser(index)">
 						{{ user.shortName}}, {{user.eduGroups[0].name }}
@@ -31,37 +31,47 @@
 		</div>
 		
 		<hr class="mb-1">
-		<div class="flex px-4">
-			<div class="mr-auto">
-				<template v-if="pending.login">привзяка ученика...</template>
-				<template v-if="pending.userInfo">получение информации об ученике...</template>
-				<template v-if="pending.shedule">получение расписания...</template>
-			</div>
-			<div class="ml-auto">
-				<p-button icon="pi pi-arrow-left" severity="secondary" size="small" @click="prevWeek()"></p-button>
-				{{formatDate(week[0])}} - {{formatDate(week[1])}}
-				<p-button icon="pi pi-arrow-right" severity="secondary" size="small" @click="nextWeek()"></p-button>
-			</div>
-		</div>
-		<hr class="mt-1 mb-4">
-		
+
 		<template v-if="selectedUser">
+			<div class="flex px-4">
+				<div class="mr-auto">
+					<template v-if="pending.login">привзяка ученика...</template>
+					<template v-if="pending.userInfo">получение информации об ученике...</template>
+					<template v-if="pending.shedule">получение расписания...</template>
+				</div>
+				<div class="ml-auto">
+					<p-button icon="pi pi-arrow-left" severity="secondary" size="small" @click="prevWeek()"></p-button>
+					{{formatDate(week[0])}} - {{formatDate(week[1])}}
+					<p-button icon="pi pi-arrow-right" severity="secondary" size="small" @click="nextWeek()"></p-button>
+				</div>
+			</div>
+			<hr class="mt-1 mb-4">
 			
-			
-			<div v-if="homeworks">
+			<div v-if="shedule">
 				<swiper-container slides-per-view="auto" space-between="30" free-mode-enabled="true" free-mode-sticky="true" >
-					<swiper-slide v-for="(homework, index) in homeworks" :key="'homeworks-'+index" class="w-auto h-auto">
+					<swiper-slide v-for="(day, index) in shedule" :key="'day-'+index" class="w-auto h-auto">
 						<p-card class="w-72 h-full">
 							<template #content>
-								{{formatDate(homework.date, true)}}
+								{{day.date}}
 								<br>
 								<div >
-									<div v-for="(lesson, index) in homework.lessons" :key="'lesson-'+index" class="mb-3">
+									<div v-for="(lesson, index) in day.lessons" :key="'lesson-'+index" class="mb-3">
 										<div v-if="lesson">
-											<strong>{{index + 1}}. {{lesson.name}}</strong> 
+											<strong>{{index + 1}}. {{lesson.subject}}</strong> 
+											<div class="mb-1 text-xs">{{lesson.hours}}</div>
 											<div class="text-xs">{{lesson.theme}}</div>
-											<div v-if="lesson.works" class="bg-gray-100">
-												<p v-for="(work, index) in lesson.works" :key="'work-'+index" class="p-1 mb-1">{{work}}</p>
+											<div v-if="lesson.marks" class="bg-gray-100">
+												<p v-for="(mark, index) in lesson.marks" :key="'mark-'+index" class="p-1 mb-1">{{mark}}</p>
+											</div>
+											<div v-if="lesson.homeworks" class="bg-gray-100">
+												<div v-for="(homework, index) in lesson.homeworks" :key="'homework-'+index" class="p-1 mb-1">
+													{{homework.text}}
+													<div v-if="homework.files">
+														<a v-for="(file, index2) in homework.files" :key="'file-'+index2" :href="file.downloadUrl" target="_blank">
+															<p-badge :value="file.name + ' ' + file.type"></p-badge>
+														</a>
+													</div>
+												</div>
 											</div>
 										</div>
 									</div>
@@ -113,10 +123,10 @@
 				const pending = ref({
 					login: false,
 					userInfo: false,
-					homeworks: false
+					homeworks: false,
+					shedule: false
 				});
 				const homeworksData= ref(null);
-				const marksData = ref(null);
 				const sheduleData = ref(null);
 				//const homeworks = ref([]);
 				const monday = ref(null);
@@ -124,6 +134,37 @@
 				const week = computed(() => {
 					if(monday.value === null) return [];
 					return [monday.value, dayjs(monday.value).add(6, 'day').toDate()]
+				})
+				const shedule = computed(() => {
+					if(sheduleData.value === null) return [];
+					let shedule = [];
+					sheduleData.value.days.forEach(day => {
+						const lessons = day.lessons.map(lesson => {
+							return {
+								subject : getSubjectName(day.subjects, lesson.subjectId),
+								theme : lesson.title,
+								building : lesson.building,
+								place : lesson.place,
+								floor : lesson.floor,
+								hours : lesson.hours,
+								homeworks: getHomeWorksBySubjectAndDate(lesson.subjectId, day.date),
+								marks: day.marks.filter(mark => {
+									const works = day.works.filter(work => lesson.subjectId === work.subjectId).map(work => work.id_str)
+									return works.includes(mark.work_str)
+								}).map(mark => mark.textValue)
+								//day.works.filter(work => lesson.subjectId === work.subjectId)
+								/*marks: day.marks.filter(mark => {
+												return lesson.works.includes(mark.work) && dayjs(mark.date).isSame(day.date, 'day')
+											}).map(mark => mark.textValue)*/
+							}
+						})
+						shedule.push({
+							date:dayjs(day.date).locale('ru').format('DD.MM.YYYY dd'),
+							lessons:lessons
+						})
+					})
+					console.log('shedule',shedule)
+					return shedule
 				})
 				const homeworks = computed(() => {
 					if(homeworksData.value === null) return [];
@@ -323,23 +364,6 @@
 						}
 					}
 				}
-				const getMarks = async (startDate, endDate) => {
-					console.log('get marks');
-					pending.value.marks = true;
-					try {
-						const data = await instance.get(`/v2/persons/${selectedUser.value.personId}/schools/${selectedUser.value.schoolIds[0]}/marks/${dayjs(startDate).format('YYYY-MM-DD')}/${dayjs(endDate).format('YYYY-MM-DD')}`,)
-						pending.value.marks = false
-						console.log('marksData', data)
-						marksData.value = data.data
-						
-					} catch (error) {
-						console.log(error)
-						if (error.response) {
-							pending.value.marks = false
-							console.log(error.response.data.description);
-						}
-					}
-				}
 				const getShedule = async (startDate, endDate) => {
 					console.log('get shedule');
 					pending.value.shedule = true;
@@ -411,14 +435,37 @@
 					}
 					return dates;
 				}
-				const getSubjectName = (id) => {
+				/*const getSubjectName = (id) => {
 					return homeworksData.value.subjects.find(subject => subject.id === id).name
+				}*/
+				const getSubjectName = (subjects, id) => {
+					return subjects.find(subject => subject.id === id).name
+				}
+				const getHomeWorksBySubjectAndDate = (id, date) => {
+					return homeworksData.value.works.filter(work => {
+						return work.subjectId === id && dayjs(work.targetDate).isSame(date, 'day')
+					}).map(work => {
+						const homework = {}
+						if(work.files) {
+							homework.files = getFiles(work.files)
+						}
+						homework.text = work.text
+						return homework
+					})
+					return homeworks;
 				}
 				const getWorks = (works) => {
 					return works.map(work => getWork(work).text)
 				}
 				const getWork = (work) => {
 					return homeworksData.value.works.find(w => w.id === work)
+				}
+				const getFiles = (array) => {
+					return array.map(file => getFile(file))
+					
+				}
+				const getFile = (id) => {
+					return homeworksData.value.files.find(file => file.id === id)
 				}
 				const formatDate = (date, withDayOfWeek) => {
 					return dayjs(date).locale('ru').format(withDayOfWeek?'DD.MM.YYYY (dddd)':'DD.MM.YYYY')
@@ -457,7 +504,6 @@
 				watch(monday, async () => {
 					if(selectedUser.value) {
 						homeworks.value = await getHomeworks(...week.value);
-						getMarks(...week.value)
 						getShedule(...week.value)
 					}
 					//getUserInfo();
@@ -480,6 +526,9 @@
 					week,
 					prevWeek,
 					nextWeek,
+					sheduleData,
+					getSubjectName,
+					shedule
 				};
 			},
 		});
@@ -497,7 +546,8 @@
 			.component('p-tabs', PrimeVue.Tabs)
 			.component('p-tablist', PrimeVue.TabList)
 			.component('p-tab', PrimeVue.Tab)
-			.component('p-card', PrimeVue.Card);
+			.component('p-card', PrimeVue.Card)
+			.component('p-badge', PrimeVue.Badge);
 
 		app.mount('#app');
 	</script>
