@@ -11,7 +11,8 @@
 	<script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-element-bundle.min.js"></script>
 	<script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
 	<script src="https://cdn.jsdelivr.net/npm/dayjs@1/locale/ru.js"></script>
-	<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+	<!--<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>-->
+	<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
 	<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
 	<script src="https://cdn.tailwindcss.com"></script>
 	<script src="https://unpkg.com/primevue/umd/primevue.min.js"></script>
@@ -33,13 +34,17 @@
 		<hr class="mb-1">
 
 		<template v-if="selectedUser">
-			<div class="flex px-4">
+			<div class="flex flex-wrap px-4 sticky top-0 bg-white z-10">
 				<div class="mr-auto">
 					<template v-if="pending.login">привзяка ученика...</template>
 					<template v-if="pending.userInfo">получение информации об ученике...</template>
-					<template v-if="pending.shedule">получение расписания...</template>
+					<template v-if="pending.shedule || pending.homeworks">получение расписания...</template>
 				</div>
 				<div class="ml-auto">
+					<span class="mr-2">
+						<template v-if="hasBadMark"><span class="line-through mr-1">{{summ}}</span>0</template>
+						<template v-else>{{summ}}</template>
+					</span>
 					<p-button icon="pi pi-arrow-left" severity="secondary" size="small" @click="prevWeek()"></p-button>
 					{{formatDate(week[0])}} - {{formatDate(week[1])}}
 					<p-button icon="pi pi-arrow-right" severity="secondary" size="small" @click="nextWeek()"></p-button>
@@ -49,29 +54,31 @@
 			
 			<div v-if="shedule">
 				<swiper-container slides-per-view="auto" space-between="30" free-mode-enabled="true" free-mode-sticky="true" >
-					<swiper-slide v-for="(day, index) in shedule" :key="'day-'+index" class="w-auto h-auto">
+					<swiper-slide v-for="(day, index) in shedule" :key="'day-'+index" class="w-auto h-auto mb-1">
 						<p-card class="w-72 h-full">
 							<template #content>
 								{{day.date}}
 								<br>
 								<div >
 									<div v-for="(lesson, index) in day.lessons" :key="'lesson-'+index" class="mb-3">
-										<div v-if="lesson">
-											<strong>{{index + 1}}. {{lesson.subject}}</strong> 
-											<div class="mb-1 text-xs">{{lesson.hours}}</div>
-											<div class="text-xs">{{lesson.theme}}</div>
-											<div v-if="lesson.marks" class="bg-gray-100">
-												<p v-for="(mark, index) in lesson.marks" :key="'mark-'+index" class="p-1 mb-1">{{mark}}</p>
-											</div>
-											<div v-if="lesson.homeworks" class="bg-gray-100">
-												<div v-for="(homework, index) in lesson.homeworks" :key="'homework-'+index" class="p-1 mb-1">
-													{{homework.text}}
-													<div v-if="homework.files">
-														<a v-for="(file, index2) in homework.files" :key="'file-'+index2" :href="file.downloadUrl" target="_blank">
-															<p-badge :value="file.name + ' ' + file.type"></p-badge>
-														</a>
+										<div v-if="lesson" class="flex items-start">
+											<div class="mr-1">
+												<strong class="inline-block">{{lesson.number}}. {{lesson.subject}}</strong> 
+												<div class="inline-block ml-2 mb-1 text-xs">{{lesson.hours}}, {{lesson.place}}</div>
+												<div class="mb-1 text-xs">{{lesson.theme}}</div>
+												<div v-if="lesson.homeworks" class="bg-gray-100 rounded-md px-1">
+													<div v-for="(homework, index) in lesson.homeworks" :key="'homework-'+index" class="p-1 mb-1">
+														{{homework.text}}
+														<div v-if="homework.files">
+															<a v-for="(file, index2) in homework.files" :key="'file-'+index2" :href="file.downloadUrl" target="_blank">
+																<p-badge :value="file.name + ' ' + file.type" severity="info"></p-badge>
+															</a>
+														</div>
 													</div>
 												</div>
+											</div>
+											<div v-if="lesson.marks" class="text-white font-semibold text-xs text-center">
+												<div v-for="(mark, index) in lesson.marks" :key="'mark-'+index" class="p-1 mb-1  w-6 h-6  rounded-md" :class="{'bg-green-600': mark.mood === 'Good', 'bg-yellow-600': mark.mood === 'Average', 'bg-red-600': mark.mood === 'Bad'}">{{mark.text}}</div>
 											</div>
 										</div>
 									</div>
@@ -134,12 +141,41 @@
 				});
 				const homeworksData= ref(null);
 				const sheduleData = ref(null);
-				//const homeworks = ref([]);
 				const monday = ref(null);
 				const addUserDialog = ref(false);
 				const week = computed(() => {
 					if(monday.value === null) return [];
 					return [monday.value, dayjs(monday.value).add(6, 'day').toDate()]
+				})
+				const hasBadMark = ref(false);
+				const summ = computed(() => {
+					const prices = {
+						Good: +150,
+						Average: -50,
+						Bad: 0
+					}
+					let avgCount = 0;
+					let goodCount = 0;
+					if(sheduleData.value === null) return [];
+					let summ = sheduleData.value.days.flatMap(day => {
+						return day.marks.map(mark => {
+							if(mark.mood === 'Bad') hasBadMark.value = true
+							if(mark.mood === 'Average') avgCount++;
+							if(mark.mood === 'Good') goodCount++;
+							return prices[mark.mood]
+						})
+					})
+					summ = summ.reduce((a, b) => a + b, 0);
+					if(avgCount === 0) {
+						if(goodCount >3) {
+							summ += 150
+						} else if(goodCount > 5) {
+							summ += 250
+						}
+					}
+					console.log('summ',summ)
+					return summ
+					
 				})
 				const shedule = computed(() => {
 					if(sheduleData.value === null) return [];
@@ -149,6 +185,7 @@
 							const startTime = lesson.hours.split(' ')[0].split(':');
 							return {
 								subject : getSubjectName(day.subjects, lesson.subjectId),
+								number : lesson.number,
 								theme : lesson.title,
 								building : lesson.building,
 								place : lesson.place,
@@ -159,7 +196,9 @@
 								marks: day.marks.filter(mark => {
 									const works = day.works.filter(work => lesson.subjectId === work.subjectId).map(work => work.id_str)
 									return works.includes(mark.work_str)
-								}).map(mark => mark.textValue)
+								}).map(mark => {
+									return {mood:mark.mood,text:mark.textValue}
+								})
 							}
 						}).sort((a, b) => a.startDate - b.startDate);
 						
@@ -170,34 +209,6 @@
 					})
 					console.log('shedule',shedule)
 					return shedule
-				})
-				const homeworks = computed(() => {
-					if(homeworksData.value === null) return [];
-					let homeworks = [];
-					//const week = getWeek();
-					const range = getDatesRange(week.value[0], week.value[1]);
-					const length = range.length;
-					for (let i = 0; i < length; i++) {
-						homeworks[i] = {};
-						homeworks[i].date = range[i];
-						homeworks[i].lessons = [];
-					}
-					
-					homeworksData.value.lessons.forEach(lesson => {
-						const date = dayjs(lesson.date);
-						const homework = homeworks.find(work => {
-							return date.isSame(work.date, 'day')
-						})
-						if(homework){
-							homework.lessons[lesson.number] = {
-								name:getSubjectName(lesson.subjectId),
-								theme:lesson.title,
-								works:getWorks(lesson.works)
-							};
-						}
-					})
-					console.log('homeworks',homeworks)
-					return homeworks
 				})
 
 				const instance = axios.create({
@@ -245,13 +256,6 @@
 							exp: data.data.credentials.expiresDate,
 							id: data.data.credentials.userId
 						};
-						/*users.value.push({
-							login: login.value,
-							access: data.data.credentials.accessToken,
-							refresh: data.data.credentials.refreshToken,
-							exp: data.data.credentials.expiresDate,
-							id: data.data.credentials.userId
-						})*/
 						console.log('user', userObj)
 						instance.defaults.headers.common['Access-Token'] = userObj.access;
 						const userInfo = await getUserInfo(userObj.id);
@@ -297,7 +301,6 @@
 						const userInfo = await getUserInfo(data.data.credentials.userId);
 						if (userInfo) {
 							const userInUsers = findUser(user.login)
-							//console.log('userInfo', userInfo)
 							Object.assign(userInUsers, userObj)
 							console.log('users.value', users.value)
 							storageUsers();
@@ -328,7 +331,6 @@
 						refreshToken(selectedUser.value);
 					}
 					monday.value = getMonday(new Date());
-					//homeworks.value = await getHomeworks(...getWeek());
 				}
 				const getUserInfo = async (id) => {
 					pending.value.userInfo = true
@@ -336,10 +338,8 @@
 						const data = await instance.get(`/v2/users/${id}/context`)
 
 						pending.value.userInfo = false
-						//this.config = data.data
 						console.log('data', data.data)
 						return data.data
-						//user.value = data.data.contextPersons[0]
 						callback && callback();
 
 					} catch (error) {
@@ -357,7 +357,6 @@
 					console.log('get homeworks');
 					pending.value.homeworks = true;
 					try {
-						//const data = await instance.get(`/v2/persons/${selectedUser.value.personId}/groups/${selectedUser.value.eduGroups[0].id_str}/schedules`)
 						const data = await instance.get(`/v2/users/me/school/${selectedUser.value.schoolIds[0]}/homeworks`, {
 							params: {
 								startDate:dayjs(startDate).format('YYYY-MM-DD'),
@@ -367,7 +366,7 @@
 						pending.value.homeworks = false
 						console.log('homeworksData', data)
 						homeworksData.value = data.data
-						//formatHomeworks(getDatesRange(startDate, endDate))
+						
 					} catch (error) {
 						console.log(error)
 						if (error.response) {
@@ -397,28 +396,7 @@
 						}
 					}
 				}
-				/*const formatHomeworks = (range) => {
-					if(!homeworks.value) return;
-					const length = range.length;
-					for (let i = 0; i < length; i++) {
-						homeworks.value[i] = {};
-						homeworks.value[i].date = range[i];
-						homeworks.value[i].lessons = [];
-					}
-					console.log('homeworks',homeworks.value)
-					homeworksData.value.lessons.forEach(lesson => {
-						const date = dayjs(lesson.date);
-						const homework = homeworks.value.find(work => {
-							return date.isSame(work.date, 'day')
-						})
-						homework.lessons[lesson.number] = {
-							name:getSubjectName(lesson.subjectId),
-							theme:lesson.title,
-							works:getWorks(lesson.works)
-						};
-					})
-					console.log('homeworks',homeworks.value)
-				}*/
+				
 				const getCurrentWeek = () => {
 					const days = [6, 0, 1, 2, 3, 4, 5];
 					let date = new Date();
@@ -430,9 +408,6 @@
 					endDate=dayjs(startDate).add(6, 'day').toDate();
 					return [startDate, endDate];
 				}
-				/*const getWeek = () => {
-					return [monday.value, dayjs(monday.value).add(6, 'day').toDate()]
-				}*/
 				const getMonday = (date) => {
 					const days = [6, 0, 1, 2, 3, 4, 5];
 					let day = days[date.getDay()];
@@ -447,9 +422,6 @@
 					}
 					return dates;
 				}
-				/*const getSubjectName = (id) => {
-					return homeworksData.value.subjects.find(subject => subject.id === id).name
-				}*/
 				const getSubjectName = (subjects, id) => {
 					return subjects.find(subject => subject.id === id).name
 				}
@@ -515,8 +487,8 @@
 				})
 				watch(monday, async () => {
 					if(selectedUser.value) {
-						homeworks.value = await getHomeworks(...week.value);
-						getShedule(...week.value)
+						await getHomeworks(...week.value);
+						await getShedule(...week.value);
 					}
 					//getUserInfo();
 				})
@@ -534,14 +506,15 @@
 					addUserDialog,
 					selectedUser,
 					user,
-					homeworks,
 					formatDate,
 					week,
 					prevWeek,
 					nextWeek,
 					sheduleData,
 					getSubjectName,
-					shedule
+					shedule,
+					summ,
+					hasBadMark
 				};
 			},
 		});
