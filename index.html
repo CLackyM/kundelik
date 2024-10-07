@@ -20,8 +20,8 @@
 
 	<div id="app">
 		<div class="flex items-center px-1 w-full">
-			<p-button @click="addUserDialog = true" icon="pi pi-plus" rounded class="flex-none"></p-button>
-			<p-tabs v-if="users" :value="0" scrollable style="width: calc(100% - 40px);">
+			<p-button @click="addUserDialog = true" icon="pi pi-plus" rounded class="flex-none my-1" size="small"></p-button>
+			<p-tabs v-if="users.length > 0" :value="0" scrollable style="width: calc(100% - 40px);">
 				<p-tablist>
 					<p-tab v-for="(user, index) in users" :key="'users-'+index" :value="index" @click="selectUser(index)">
 						{{ user.shortName}}, {{user.eduGroups[0].name }}
@@ -84,18 +84,21 @@
 			</div>
 		</template>
 		<p-dialog v-model:visible="addUserDialog" modal header="Добавить ученика" :style="{ width: '25rem' }">
-			<div class="flex items-center gap-4 mb-8">
-				<label for="login" class="font-semibold w-24">Логин</label>
-				<p-inputtext v-model="login" id="login" class="flex-auto" autocomplete="on" />
-			</div>
-			<div class="flex items-center gap-4 mb-8">
-				<label for="password" class="font-semibold w-24">Пароль</label>
-				<p-password v-model="pass" id="password" toggle-mask :feedback="false" class="flex-auto" />
-			</div>
-			<div class="flex justify-end gap-2">
-				<p-button label="Добавить" @click="getTokens()"></p-button>
-				<p-button type="button" label="Отмена" @click="addUserDialog = false"></p-button>
-			</div>
+			<form action="">
+				<div class="flex items-center gap-4 mb-8">
+					<label for="login" class="font-semibold w-24">Логин</label>
+					<p-inputtext v-model="login" id="login" class="flex-auto" autocomplete="on" />
+				</div>
+				<div class="flex items-center gap-4 mb-6">
+					<label for="password" class="font-semibold w-24">Пароль</label>
+					<p-password v-model="pass" id="password" toggle-mask :feedback="false" class="flex-auto" />
+				</div>
+				<p-message severity="error" v-if="errors.loginOrPass"class="mb-4" >Неверный логин или пароль</p-message>
+				<div class="flex justify-end gap-2">
+					<p-button label="Добавить" @click="getTokens()"></p-button>
+					<p-button type="button" label="Отмена" @click="addUserDialog = false"></p-button>
+				</div>
+			</form>
 		</p-dialog>
 	</div>
 
@@ -126,6 +129,9 @@
 					homeworks: false,
 					shedule: false
 				});
+				const errors = ref({
+					loginOrPass: false,
+				});
 				const homeworksData= ref(null);
 				const sheduleData = ref(null);
 				//const homeworks = ref([]);
@@ -140,6 +146,7 @@
 					let shedule = [];
 					sheduleData.value.days.forEach(day => {
 						const lessons = day.lessons.map(lesson => {
+							const startTime = lesson.hours.split(' ')[0].split(':');
 							return {
 								subject : getSubjectName(day.subjects, lesson.subjectId),
 								theme : lesson.title,
@@ -147,17 +154,15 @@
 								place : lesson.place,
 								floor : lesson.floor,
 								hours : lesson.hours,
+								startDate:dayjs(day.date).add(startTime[0], 'hour').add(startTime[1], 'minute').toDate(),
 								homeworks: getHomeWorksBySubjectAndDate(lesson.subjectId, day.date),
 								marks: day.marks.filter(mark => {
 									const works = day.works.filter(work => lesson.subjectId === work.subjectId).map(work => work.id_str)
 									return works.includes(mark.work_str)
 								}).map(mark => mark.textValue)
-								//day.works.filter(work => lesson.subjectId === work.subjectId)
-								/*marks: day.marks.filter(mark => {
-												return lesson.works.includes(mark.work) && dayjs(mark.date).isSame(day.date, 'day')
-											}).map(mark => mark.textValue)*/
 							}
-						})
+						}).sort((a, b) => a.startDate - b.startDate);
+						
 						shedule.push({
 							date:dayjs(day.date).locale('ru').format('DD.MM.YYYY dd'),
 							lessons:lessons
@@ -214,6 +219,7 @@
 						return
 					}
 					pending.value.login = true
+					errors.value.loginOrPass = false
 					try {
 						instance.defaults.headers.common['Access-Token'] = '';
 						const data = await instance.post('mobile/v7/authorizations/bycredentials', {
@@ -225,6 +231,12 @@
 						})
 
 						pending.value.login = false
+						if(data.data.type === 'Error'){
+							if(data.data.description === 'Пайдаланушы аты немесе құпиясөзде қате бар. Өрістердің дұрыс толтырылуын тексеріңіз.'){
+								errors.value.loginOrPass = true
+								return;
+							}
+						}
 						let userObj = {
 							login: login.value,
 							pass: pass.value,
@@ -487,7 +499,7 @@
 					console.log('dayjs ', dayjs().format())
 					
 					await getUsers()
-					if (users.value) {
+					if (users.value.length > 0) {
 						const lastSelected = await getLastSelected();
 						if (lastSelected) {
 							const lastSelectedUser = findUser(lastSelected);
@@ -514,6 +526,7 @@
 					cSecret,
 					login,
 					pass,
+					errors,
 					getTokens,
 					pending,
 					users,
@@ -547,7 +560,8 @@
 			.component('p-tablist', PrimeVue.TabList)
 			.component('p-tab', PrimeVue.Tab)
 			.component('p-card', PrimeVue.Card)
-			.component('p-badge', PrimeVue.Badge);
+			.component('p-badge', PrimeVue.Badge)
+			.component('p-message', PrimeVue.Message);
 
 		app.mount('#app');
 	</script>
