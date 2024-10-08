@@ -5,20 +5,10 @@
 	<title>Кунделик</title>
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width" />
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/primeicons/7.0.0/primeicons.min.css" integrity="sha512-AmPkAwXBnEkMWvc+V9PvjVgFmJWB3HKMSgBJolV4LMXwAwoFTAlk5WY1yiz504VynFGQLwiLVp/JqlcWxAEmJw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 </head>
 
 <body>
-	<script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-element-bundle.min.js"></script>
-	<script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
-	<script src="https://cdn.jsdelivr.net/npm/dayjs@1/locale/ru.js"></script>
-	<!--<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>-->
-	<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-	<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
-	<script src="https://cdn.tailwindcss.com"></script>
-	<script src="https://unpkg.com/primevue/umd/primevue.min.js"></script>
-	<script src="https://unpkg.com/@primevue/themes/umd/aura.min.js"></script>
-	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/primeicons/7.0.0/primeicons.min.css" integrity="sha512-AmPkAwXBnEkMWvc+V9PvjVgFmJWB3HKMSgBJolV4LMXwAwoFTAlk5WY1yiz504VynFGQLwiLVp/JqlcWxAEmJw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-
 	<div id="app">
 		<div class="flex items-center px-1 w-full">
 			<p-button @click="addUserDialog = true" icon="pi pi-plus" rounded class="flex-none my-1" size="small"></p-button>
@@ -77,8 +67,11 @@
 													</div>
 												</div>
 											</div>
-											<div v-if="lesson.marks" class="text-white font-semibold text-xs text-center">
+											<div v-if="lesson.marks" class="text-white font-semibold text-xs text-center ml-auto">
 												<div v-for="(mark, index) in lesson.marks" :key="'mark-'+index" class="p-1 mb-1  w-6 h-6  rounded-md" :class="{'bg-green-600': mark.mood === 'Good', 'bg-yellow-600': mark.mood === 'Average', 'bg-red-600': mark.mood === 'Bad'}">{{mark.text}}</div>
+											</div>
+											<div v-if="lesson.lessonsLog" class="text-white font-semibold text-xs text-center ml-auto">
+												<div v-for="(log, index) in lesson.lessonsLog" :key="'log-'+index" class="p-1 mb-1  w-6 h-6  rounded-md" :class="{'bg-gray-400': log.status === 'Ill'}">{{log.status === 'Ill'? 'Б' : ''}}</div>
 											</div>
 										</div>
 									</div>
@@ -108,7 +101,15 @@
 			</form>
 		</p-dialog>
 	</div>
-
+	<script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-element-bundle.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/dayjs@1/locale/ru.js"></script>
+	<!--<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>-->
+	<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+	<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+	<script src="https://cdn.tailwindcss.com"></script>
+	<script src="https://unpkg.com/primevue/umd/primevue.min.js"></script>
+	<script src="https://unpkg.com/@primevue/themes/umd/aura.min.js"></script>
 	<script>
 		
 		const {
@@ -150,19 +151,28 @@
 				const hasBadMark = ref(false);
 				const summ = computed(() => {
 					const prices = {
-						Good: +150,
-						Average: -50,
-						Bad: 0
+						good: +150,
+						avg: -50,
+						bad: 0
 					}
+					
 					let avgCount = 0;
 					let goodCount = 0;
 					if(sheduleData.value === null) return [];
 					let summ = sheduleData.value.days.flatMap(day => {
 						return day.marks.map(mark => {
-							if(mark.mood === 'Bad') hasBadMark.value = true
-							if(mark.mood === 'Average') avgCount++;
-							if(mark.mood === 'Good') goodCount++;
-							return prices[mark.mood]
+							let mood = ''
+							if(mark.value < 8) {
+								mood = 'avg'
+							} else if(mark.value < 5) {
+								mood = 'bad'
+							} else {
+								mood = 'good'
+							}
+							if(mood === 'bad') hasBadMark.value = true
+							if(mood === 'avg') avgCount++;
+							if(mood === 'good') goodCount++;
+							return prices[mood]
 						})
 					})
 					summ = summ.reduce((a, b) => a + b, 0);
@@ -193,12 +203,8 @@
 								hours : lesson.hours,
 								startDate:dayjs(day.date).add(startTime[0], 'hour').add(startTime[1], 'minute').toDate(),
 								homeworks: getHomeWorksBySubjectAndDate(lesson.subjectId, day.date),
-								marks: day.marks.filter(mark => {
-									const works = day.works.filter(work => lesson.subjectId === work.subjectId).map(work => work.id_str)
-									return works.includes(mark.work_str)
-								}).map(mark => {
-									return {mood:mark.mood,text:mark.textValue}
-								})
+								marks: day.marks.filter(mark => day.works.some(work => work.subjectId === lesson.subjectId && work.id_str === mark.work_str)).map(mark => ({mood:mark.mood,text:mark.textValue})),
+								lessonsLog: day.lessonLogEntries.filter(log => day.works.some(work => work.subjectId === lesson.subjectId && work.lesson_str === log.lesson_str))
 							}
 						}).sort((a, b) => a.startDate - b.startDate);
 						
@@ -210,7 +216,6 @@
 					console.log('shedule',shedule)
 					return shedule
 				})
-
 				const instance = axios.create({
 					baseURL: 'https://api.kundelik.kz/'
 				});
