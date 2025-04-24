@@ -150,6 +150,7 @@
 				})
 				const hasBadMark = ref(false);
 				const summ = computed(() => {
+					hasBadMark.value = false
 					const prices = {
 						good: +150,
 						avg: -50,
@@ -162,10 +163,11 @@
 					let summ = sheduleData.value.days.flatMap(day => {
 						return day.marks.map(mark => {
 							let mood = ''
-							if(mark.value < 8) {
-								mood = 'avg'
-							} else if(mark.value < 5) {
+							
+							if(mark.value < 5) {
 								mood = 'bad'
+							} else if(mark.value < 8) {
+								mood = 'avg'
 							} else {
 								mood = 'good'
 							}
