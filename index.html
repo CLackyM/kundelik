@@ -178,11 +178,12 @@
 						})
 					})
 					summ = summ.reduce((a, b) => a + b, 0);
+					console.log('avgCount ',avgCount,'goodCount',goodCount)
 					if(avgCount === 0) {
-						if(goodCount >3) {
-							summ += 150
-						} else if(goodCount > 5) {
+						if(goodCount > 5) {
 							summ += 250
+						} else if(goodCount >3) {
+							summ += 150
 						}
 					}
 					console.log('summ',summ)
