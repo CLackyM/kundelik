@@ -6,10 +6,15 @@
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width" />
 	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/primeicons/7.0.0/primeicons.min.css" integrity="sha512-AmPkAwXBnEkMWvc+V9PvjVgFmJWB3HKMSgBJolV4LMXwAwoFTAlk5WY1yiz504VynFGQLwiLVp/JqlcWxAEmJw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+	<style>
+		[v-cloak] {
+			display: none;
+		}
+	</style>
 </head>
 
 <body>
-	<div id="app">
+	<div id="app" v-cloak>
 		<div class="flex items-center px-1 w-full">
 			<p-button @click="addUserDialog = true" icon="pi pi-plus" rounded class="flex-none my-1" size="small"></p-button>
 			<p-tabs v-if="users.length > 0" :value="0" scrollable style="width: calc(100% - 40px);">
@@ -93,7 +98,7 @@
 					<label for="password" class="font-semibold w-24">Пароль</label>
 					<p-password v-model="pass" id="password" toggle-mask :feedback="false" class="flex-auto" />
 				</div>
-				<p-message severity="error" v-if="errors.loginOrPass"class="mb-4" >Неверный логин или пароль</p-message>
+				<p-message severity="error" v-if="errors.loginOrPass" class="mb-4" >Неверный логин или пароль</p-message>
 				<div class="flex justify-end gap-2">
 					<p-button label="Добавить" @click="getTokens()"></p-button>
 					<p-button type="button" label="Отмена" @click="addUserDialog = false"></p-button>
@@ -159,7 +164,7 @@
 					
 					let avgCount = 0;
 					let goodCount = 0;
-					if(sheduleData.value === null) return [];
+					if(sheduleData.value === null) return '';
 					let summ = sheduleData.value.days.flatMap(day => {
 						return day.marks.map(mark => {
 							let mood = ''
@@ -385,6 +390,7 @@
 				}
 				const getShedule = async (startDate, endDate) => {
 					console.log('get shedule');
+					sheduleData.value = null
 					pending.value.shedule = true;
 					try {
 						const data = await instance.get(`/v2/persons/${selectedUser.value.personId}/groups/${selectedUser.value.eduGroups[0].id_str}/schedules`, {
