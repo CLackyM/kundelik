@@ -157,8 +157,8 @@
 				const summ = computed(() => {
 					hasBadMark.value = false
 					const prices = {
-						good: +150,
-						avg: -50,
+						good: +200,
+						avg: -70,
 						bad: 0
 					}
 					
@@ -186,9 +186,9 @@
 					console.log('avgCount ',avgCount,'goodCount',goodCount)
 					if(avgCount === 0) {
 						if(goodCount > 5) {
-							summ += 250
+							summ += 300
 						} else if(goodCount >3) {
-							summ += 150
+							summ += 200
 						}
 					}
 					console.log('summ',summ)
